@@ -1,5 +1,4 @@
-/*
-©  [2018] Microchip Technology Inc. and its subsidiaries.
+/* ©  [2018] Microchip Technology Inc. and its subsidiaries.
 
 Subject to your compliance with these terms, you may use Microchip software and
 any derivatives exclusively with Microchip products. It is your responsibility
@@ -56,156 +55,64 @@ struct libusb_session {
 
 static struct libusb_session session;
 
+#define LINK_COMPLIANCE_MODE 0x0A
 
 int main(int argc, char **argv)
 {
-	int r,i,z;
-	char yesno[] = "";
-	int timeout_time;
-	char port_select[] = "";
-	char test_select[] = "";
+	int ret, port, err, len;
+	unsigned int port_select;
+	unsigned int vendor_id, product_id;
+	unsigned int timeout_set = 50000000;
+	unsigned char *data = 0;
 	ssize_t cnt;
-	int port;
-	int err = 0;
-	int VENDOR_ID = 0;
-	int PRODUCT_ID = 0;
-	char PRODUCT_ID1[4];
-	char VENDOR_ID1[4];
+	uint8_t bmRequestType = 0x23, bRequest = 0x03;
+	uint16_t wLength = 0x0000, wValue = 0x0005;
 
-INPUT1:
-	printf("Please enter the vendor ID of the USB3.1 hub under test\n0x");
-	err = scanf("%s", VENDOR_ID1);
-	if(!err)
-	{
-		printf("Please enter 4 digit hex only (len=%d, %s)\n", err, VENDOR_ID1);
-		goto INPUT1;
+
+VID_INPUT:
+	printf("Please enter the Vendor ID of the USB3.1 HUB under test\n0x");
+	err = scanf("%x", &vendor_id);
+	if (!err) {
+		printf("Please enter 4 digit hex only (len=%d, 0x%x)\n", err, vendor_id);
+		goto VID_INPUT;
 	}
 
-	int count1;
-	char hexset1[] = "0123456789ABCDEFabcdef";
-	count1 = strspn(VENDOR_ID1, hexset1);
-	if (count1 != 4)
-	{
-		printf("Please enter 4 digit hex only (count1=%d)\n", count1);
-		goto INPUT1;
-	}
-	VENDOR_ID = (int)strtol(VENDOR_ID1, NULL, 16);
-
-INPUT2:
+PID_INPUT:
 	printf("Please enter the product ID of the USB3.1 hub under test\n0x");
-	err = scanf("%s", PRODUCT_ID1);
-	if(!err)
-	{
+	err = scanf("%x", &product_id);
+	if (!err) {
 		printf("Please enter 4 digit hex only\n");
-		goto INPUT2;
+		goto PID_INPUT;
 	}
 
-	int count2;
-	char hexset2[] = "0123456789ABCDEFabcdef";
-	count2 = strspn(PRODUCT_ID1, hexset2);
-	if (count2 != 4)
-	{
-		printf("Please enter 4 digit hex only\n");
-		goto INPUT2;
-	}
-	PRODUCT_ID = (int)strtol(PRODUCT_ID1, NULL, 16);
-
-	printf("This demo will iniate USB3.1 TX_COMPLIANCE test mode on a port.\n");
-
-TEST_SEL:
-		printf("Press '1' for TX_COMPLIANCE\n");
-		printf("Press 'q' or 'Q' or CTL+C to quit\n");
-		err = scanf("%s", test_select);
-		if (!err) {
-			printf("Enter to for TX_COMPLIANCE\n");
-			goto PORT_SEL1;
+PORT_SEL:
+		printf("Which port will TX_COMPLIANCE be sent to ?\n");
+		printf("Port Selected:\n");
+		err = scanf("%d", &port_select);
+		if (!err || port_select < 1 || port_select > 7) {
+			printf("PORT %d fail\n", port_select);
+			goto PORT_SEL;
 		}
 
-		if (strcmp(test_select, "1")==0)
-		{
-PORT_SEL1:
-			printf("Which port will TX_COMPLIANCE be sent to?\n");
-			err = scanf("%s", port_select);
-			if (!err)
-				goto PORT1;
+		session.port_num = port_select;
+		session.wIndex = LINK_COMPLIANCE_MODE << 8 | port_select << 0;
 
-			if (strcmp(port_select, "1") == 0)
-			{
-PORT1:
-				printf("Port 1 selected\n");
-				session.port_num = 1;
-				session.wIndex = 0x0A01;
-			}
-			else if(strcmp(port_select, "2") == 0)
-			{
-				printf("Port 2 selected\n");
-				session.port_num = 2;
-				session.wIndex = 0x0A02;
-			}
-			else if(strcmp(port_select, "3") == 0)
-			{
-				printf("Port 3 selected\n");
-				session.port_num = 3;
-				session.wIndex = 0x0A03;
-			}
-			else if(strcmp(port_select, "4") == 0)
-			{
-				printf("Port 4 selected\n");
-				session.port_num = 4;
-				session.wIndex = 0x0A04;
-			}
-			else if(strcmp(port_select, "5") == 0)
-			{
-				printf("Port 5 selected\n");
-				session.port_num = 5;
-				session.wIndex = 0x0A05;
-			}
-			else if(strcmp(port_select, "6") == 0)
-			{
-				printf("Port 6 selected\n");
-				session.port_num = 6;
-				session.wIndex = 0x0A06;
-			}
-			else if(strcmp(port_select, "7") == 0)
-			{
-				printf("Port 7 selected\n");
-				session.port_num = 7;
-				session.wIndex = 0x0A07;
-			}
-			else
-			{
-				printf("Invalid Port Selected. Please select a valid port # or Ctrl+C to quit\n");
-				goto PORT_SEL1;
-			}
-		}
-		else if (strcmp(test_select, "q")==0 || strcmp(test_select, "Q")==0)
-		{
-			return 0;
-		}
-		else
-		{
-			printf("Invalid Test Selected or invalid character.\n");
-			goto TEST_SEL;
-		}
-
-
-		r = libusb_init(&session.ctx);
-		if (r < 0) {
-			printf("Init Error %i occourred.\n", r);
+		ret = libusb_init(&session.ctx);
+		if (ret < 0) {
+			printf("Init Error %i occourred\n", ret);
 			return -EIO;
 		}
 
-
-		cnt = libusb_get_device_list(session.ctx, &session.dev);
-		if (cnt < 0) {
+		ret = libusb_get_device_list(session.ctx, &session.dev);
+		if (ret < 0) {
 			printf("no device found\n");
 			libusb_exit(session.ctx);
 			return -ENODEV;
 		}
 
 		/* open device w/ vendorID and productID */
-		printf("Opening device ID %04x:%04x...", VENDOR_ID, PRODUCT_ID);
-		session.dev_handle = libusb_open_device_with_vid_pid(session.ctx, VENDOR_ID, PRODUCT_ID);
+		printf("Opening device ID %04x:%04x...", vendor_id, product_id);
+		session.dev_handle = libusb_open_device_with_vid_pid(session.ctx, vendor_id, product_id);
 		if (!session.dev_handle) {
 			printf("failed/not in list\n");
 			libusb_exit(session.ctx);
@@ -218,41 +125,41 @@ PORT1:
 
 		/* find out if a kernel driver is attached */
 		if (libusb_kernel_driver_active(session.dev_handle, 0) == 1) {
-			printf("Device has kernel driver attached.\n");
+			printf("Device has kernel driver attached\n");
 			/* detach it */
 			if (!libusb_detach_kernel_driver(session.dev_handle, 0))
-				printf("Kernel Driver Detached!\n");
+				printf("Kernel Driver Detached\n");
 		}
 
-		int len;
-		int transferred;
-		uint8_t bmRequestType = 0x23;
-		uint8_t bRequest = 0x03;
-		uint16_t wValue = 0x0005;
-		//uint16_t wIndex = 0x0000;
-		unsigned char *data = 0;
-		uint16_t wLength = 0x0000;
-		unsigned int timeout_ = 50000000;
+		/*
+		 * bmRequestType: is set to 0x23
+		 * 
+		 * bRequest: is set to SET_FEATURE = 0x03
+		 * 
+		 * wValue: is the Feature Selector, which is PORT_LINK_STATE = 0x05
+		 * 
+		 * wIndex: selects the PORT_LINK_STATE (MSBs) which is set to
+		 * Compliance Mode (0x0A) and the Port Number (LSBs) which is
+		 * selected in above   user input prompt
+		 * 
+		 */
 
 		/* Send Endpoint Reflector control transfer */
-		r = libusb_control_transfer(session.dev_handle,
-							bmRequestType,				/* bmRequestType is set to 0x23  */
-							bRequest,					/* bRequest is set to SET_FEATURE = 0x03 */
-							wValue,						/* wValue is the Feature Selector , which is PORT_LINK_STATE = 0x05*/
-							session.wIndex, 			/* wIndex selects the PORT_LINK_STATE (MSBs) which is set to Compliance Mode (0x0A) and the Port Number (LSBs) which is selected in above user input prompt*/
+		ret = libusb_control_transfer(session.dev_handle,
+							bmRequestType,
+							bRequest,
+							wValue,
+							session.wIndex,
 							data,
 							wLength,
-							timeout_);
-		if (!r){
+							timeout_set);
+		if (!ret)
 			printf("Port now in TX_COMPLIANCE test mode!\n");
-		}
-		else{
-			printf("Control transfer failed. Error: %d\n", r);
-		}
+		else
+			printf("Control transfer failed. Error: %d\n", ret);
 
 		/* close the device we opened */
 		libusb_close(session.dev_handle);
 		libusb_exit(session.ctx);
 		return 0;
-
 }
